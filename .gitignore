@@ -1,0 +1,10 @@
+dist/
+node_modules/
+.npm-cache/
+test/hbConfig/
+*.tgz
+.DS_Store
+coverage/
+*.tsbuildinfo
+.env
+.env.*

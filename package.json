@@ -1,0 +1,42 @@
+{
+  "name": "homebridge-kia-connect",
+  "version": "1.0.0",
+  "description": "Homebridge plugin for Kia Connect vehicles",
+  "main": "dist/src/index.js",
+  "files": [
+    "dist/**/*",
+    "config.schema.json"
+  ],
+  "type": "module",
+  "keywords": [
+    "homebridge-plugin"
+  ],
+  "license": "ISC",
+  "engines": {
+    "node": "^20.18.0 || ^22.10.0 || ^24.0.0",
+    "homebridge": "^1.8.0 || ^2.0.0-beta.0"
+  },
+  "scripts": {
+    "build": "rimraf dist && tsc && mkdir -p dist/homebridge-ui/public && cp homebridge-ui/public/index.html dist/homebridge-ui/public/index.html",
+    "lint": "eslint src/ homebridge-ui/",
+    "watch": "tsc -w",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@homebridge/plugin-ui-utils": "^1.0.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "homebridge": "^1.8.0",
+    "nodemon": "^3.1.0",
+    "rimraf": "^6.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^4.1.0"
+  }
+}

@@ -1,0 +1,196 @@
+<style>
+  .status-card { margin-bottom: 1rem; }
+  .otp-section { display: none; }
+  .success-section { display: none; }
+  .btn-group { margin-bottom: 0.5rem; }
+  #status-message { font-weight: bold; }
+</style>
+
+  <!-- Status -->
+  <div class="card status-card">
+    <div class="card-body">
+      <h5 class="card-title">Kia Connect Authentication</h5>
+      <div class="form-group">
+        <label for="username">Kia Connect Email</label>
+        <input type="email" id="username" class="form-control" autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label for="password">Kia Connect Password</label>
+        <input type="password" id="password" class="form-control" autocomplete="current-password">
+      </div>
+      <p id="status-message">Checking authentication status...</p>
+      <button id="login-btn" class="btn btn-primary" style="display:none" onclick="doLogin()">Login</button>
+    </div>
+  </div>
+
+  <!-- OTP Section -->
+  <div id="otp-section" class="card otp-section">
+    <div class="card-body">
+      <h5 class="card-title">One-Time Password Required</h5>
+      <p id="otp-info"></p>
+      <div class="btn-group">
+        <button class="btn btn-outline-primary btn-sm" onclick="sendOtp('EMAIL')">Send via Email</button>
+        <button class="btn btn-outline-secondary btn-sm" onclick="sendOtp('SMS')">Send via SMS</button>
+      </div>
+      <div class="input-group mt-3">
+        <input type="text" id="otp-code" class="form-control" placeholder="Enter OTP code" maxlength="6">
+        <button class="btn btn-success" onclick="verifyOtp()">Verify</button>
+      </div>
+      <p id="otp-status" class="mt-2 text-muted"></p>
+    </div>
+  </div>
+
+  <!-- Success -->
+  <div id="success-section" class="card success-section">
+    <div class="card-body">
+      <h5 class="card-title text-success">Authenticated</h5>
+      <p>Kia Connect is authenticated. Restart Homebridge to load your vehicle.</p>
+    </div>
+  </div>
+
+  <script>
+    let currentConfig = {};
+    let pluginAlias = 'KiaConnect';
+    let pendingOtpCredentials = null;
+
+    async function loadConfig() {
+      const pluginConfig = await homebridge.getPluginConfig();
+      const schema = await homebridge.getPluginConfigSchema();
+      pluginAlias = schema.pluginAlias || pluginAlias;
+      currentConfig = (pluginConfig && pluginConfig[0]) || {};
+      document.getElementById('username').value = currentConfig.username || '';
+      document.getElementById('password').value = currentConfig.password || '';
+    }
+
+    async function persistCredentials(username, password) {
+      const nextConfig = {
+        platform: currentConfig.platform || pluginAlias,
+        name: currentConfig.name || 'Kia Connect',
+        ...currentConfig,
+        username,
+        password,
+      };
+
+      await homebridge.updatePluginConfig([nextConfig]);
+      await homebridge.savePluginConfig();
+      currentConfig = nextConfig;
+    }
+
+    function setCredentialInputsDisabled(disabled) {
+      document.getElementById('username').disabled = disabled;
+      document.getElementById('password').disabled = disabled;
+    }
+
+    (async function checkStatus() {
+      try {
+        await loadConfig();
+        const res = await homebridge.request('/auth/status');
+        if (res.authenticated) {
+          document.getElementById('status-message').textContent = 'Authenticated';
+          document.getElementById('status-message').className = 'text-success';
+          document.getElementById('success-section').style.display = 'block';
+        } else {
+          document.getElementById('status-message').textContent = 'Not authenticated';
+          document.getElementById('login-btn').style.display = 'inline-block';
+        }
+      } catch (e) {
+        document.getElementById('status-message').textContent = 'Not authenticated';
+        document.getElementById('login-btn').style.display = 'inline-block';
+      }
+    })();
+
+    async function doLogin() {
+      const btn = document.getElementById('login-btn');
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      if (!username || !password) {
+        homebridge.toast.error('Enter your Kia Connect email and password first.');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Logging in...';
+
+      try {
+        const res = await homebridge.request('/auth/login', {
+          username,
+          password,
+        });
+        if (res.success) {
+          pendingOtpCredentials = null;
+          await persistCredentials(username, password);
+          document.getElementById('status-message').textContent = 'Authenticated!';
+          document.getElementById('status-message').className = 'text-success';
+          btn.style.display = 'none';
+          document.getElementById('success-section').style.display = 'block';
+          homebridge.toast.success('Login successful!');
+        } else if (res.otpRequired) {
+          pendingOtpCredentials = { username, password };
+          setCredentialInputsDisabled(true);
+          btn.style.display = 'none';
+          document.getElementById('status-message').textContent = 'OTP verification required';
+          document.getElementById('otp-section').style.display = 'block';
+          let info = 'A one-time password is required.';
+          if (res.email) info += ' Email: ' + res.email;
+          if (res.sms) info += ' SMS: ' + res.sms;
+          document.getElementById('otp-info').textContent = info;
+        } else {
+          pendingOtpCredentials = null;
+          setCredentialInputsDisabled(false);
+          homebridge.toast.error('Login failed. Check your credentials.');
+          btn.disabled = false;
+          btn.textContent = 'Login';
+        }
+      } catch (e) {
+        pendingOtpCredentials = null;
+        setCredentialInputsDisabled(false);
+        homebridge.toast.error('Login failed: ' + (e.message || e));
+        btn.disabled = false;
+        btn.textContent = 'Login';
+      }
+    }
+
+    async function sendOtp(method) {
+      const statusEl = document.getElementById('otp-status');
+      statusEl.textContent = 'Sending OTP via ' + method + '...';
+      try {
+        await homebridge.request('/auth/send-otp', { method });
+        statusEl.textContent = 'OTP sent via ' + method + '. Check your ' + (method === 'EMAIL' ? 'email' : 'phone') + '.';
+        statusEl.className = 'mt-2 text-success';
+        homebridge.toast.success('OTP sent!');
+      } catch (e) {
+        statusEl.textContent = 'Failed to send OTP: ' + (e.message || e);
+        statusEl.className = 'mt-2 text-danger';
+      }
+    }
+
+    async function verifyOtp() {
+      const code = document.getElementById('otp-code').value.trim();
+      if (!code) {
+        homebridge.toast.error('Please enter the OTP code');
+        return;
+      }
+
+      const statusEl = document.getElementById('otp-status');
+      statusEl.textContent = 'Verifying...';
+
+      try {
+        const res = await homebridge.request('/auth/verify-otp', { code });
+        if (res.success) {
+          if (pendingOtpCredentials) {
+            await persistCredentials(pendingOtpCredentials.username, pendingOtpCredentials.password);
+          }
+          pendingOtpCredentials = null;
+          document.getElementById('otp-section').style.display = 'none';
+          document.getElementById('success-section').style.display = 'block';
+          document.getElementById('status-message').textContent = 'Authenticated!';
+          document.getElementById('status-message').className = 'text-success';
+          homebridge.toast.success('Authentication successful! Restart Homebridge to load your vehicle.');
+        }
+      } catch (e) {
+        statusEl.textContent = 'Verification failed: ' + (e.message || e);
+        statusEl.className = 'mt-2 text-danger';
+        homebridge.toast.error('OTP verification failed');
+      }
+    }
+  </script>

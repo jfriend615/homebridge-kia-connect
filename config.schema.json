@@ -1,0 +1,51 @@
+{
+  "pluginAlias": "KiaConnect",
+  "pluginType": "platform",
+  "singular": true,
+  "customUi": true,
+  "customUiPath": "./dist/homebridge-ui",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "default": "Kia Connect",
+        "required": true
+      },
+      "username": {
+        "title": "Kia Connect Email",
+        "type": "string",
+        "required": true
+      },
+      "password": {
+        "title": "Kia Connect Password",
+        "type": "string",
+        "required": true
+      },
+      "pollIntervalMinutes": {
+        "title": "Poll Interval (minutes)",
+        "type": "integer",
+        "default": 30,
+        "minimum": 5
+      },
+      "enableClimateControl": {
+        "title": "Enable Climate Control",
+        "type": "boolean",
+        "default": true
+      },
+      "enableDoorLock": {
+        "title": "Enable Door Lock",
+        "type": "boolean",
+        "default": true
+      },
+      "vehicleIndex": {
+        "title": "Vehicle Index",
+        "type": "integer",
+        "default": 0,
+        "minimum": 0,
+        "description": "If you have multiple vehicles, specify the index (0 = first vehicle)"
+      }
+    }
+  }
+}

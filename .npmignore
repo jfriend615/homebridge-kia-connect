@@ -1,0 +1,7 @@
+/src/
+/test/
+/tsconfig.json
+/eslint.config.js
+/nodemon.json
+!/dist/
+!/dist/**
