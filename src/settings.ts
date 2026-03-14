@@ -1,5 +1,5 @@
 export const PLATFORM_NAME = 'KiaConnect';
-export const PLUGIN_NAME = 'homebridge-kia-connect';
+export const PLUGIN_NAME = 'homebridge-kia';
 export const KIA_API_BASE = 'https://api.owners.kia.com/apigw/v1/';
 export const DEFAULT_POLL_INTERVAL_MINUTES = 30;
 export const MIN_POLL_INTERVAL_MINUTES = 5;

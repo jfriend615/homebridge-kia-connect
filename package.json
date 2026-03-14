@@ -1,5 +1,5 @@
 {
-  "name": "homebridge-kia-connect",
+  "name": "homebridge-kia",
   "version": "1.0.0",
   "description": "Homebridge plugin for Kia Connect vehicles",
   "main": "dist/src/index.js",
