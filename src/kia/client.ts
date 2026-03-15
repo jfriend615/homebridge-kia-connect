@@ -192,6 +192,8 @@ export class KiaApiClient {
         this.log.info('Session expired, attempting re-login...');
         const loginResult = await this.login();
         if (loginResult.success) {
+          await this.restoreVehicleContext(vehicleKey);
+
           // Retry with new token
           const newSid = this.auth.getAccessToken();
           if (newSid) {
@@ -212,6 +214,38 @@ export class KiaApiClient {
     this.assertSuccess(response, endpoint);
 
     return response;
+  }
+
+  private async restoreVehicleContext(vehicleKey?: string): Promise<void> {
+    const targetVehicleKey = vehicleKey ?? this.auth.getVehicleKey();
+    if (!targetVehicleKey) {
+      return;
+    }
+
+    const sid = this.auth.getAccessToken();
+    if (!sid) {
+      throw new AuthenticationError('No access token available after re-login', 0, 0);
+    }
+
+    const response = await this.request('GET', 'ownr/gvl', undefined, { sid });
+    this.assertSuccess(response, 'ownr/gvl');
+
+    const payload = response.body.payload as Record<string, unknown> | undefined;
+    const vehicleList = payload?.vehicleSummary;
+    if (!Array.isArray(vehicleList)) {
+      throw new AuthenticationError('No vehicles found after re-login', 1, 1005);
+    }
+
+    const matchingVehicle = vehicleList.find((vehicle) => {
+      const vehicleRecord = vehicle as Record<string, unknown>;
+      return (vehicleRecord.vehicleKey as string | undefined) === targetVehicleKey;
+    });
+
+    if (!matchingVehicle) {
+      throw new AuthenticationError('Selected vehicle is not available after re-login', 1, 1005);
+    }
+
+    this.auth.setVehicleKey(targetVehicleKey);
   }
 
   private assertSuccess(response: HttpResponse, endpoint: string): void {

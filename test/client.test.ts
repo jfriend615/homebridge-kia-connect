@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { KiaApiClient } from '../src/kia/client.js';
+import { AuthenticationError } from '../src/kia/types.js';
 import type { KiaAuthManager } from '../src/kia/auth.js';
 
 // Stub auth manager — only the methods client actually calls
@@ -157,5 +158,140 @@ describe('parseNumber (via parseVehicleStatus)', () => {
   it('returns null for non-numeric string', () => {
     const state = parseStatus({ outsideTemp: 'N/A' });
     expect(state.outsideTemperature).toBeNull();
+  });
+});
+
+describe('authenticatedRequest re-login flow', () => {
+  it('reloads vehicle context before retrying a vehicle command', async () => {
+    const updateToken = vi.fn();
+    const setVehicleKey = vi.fn();
+    let currentSid = 'expired-sid';
+
+    const auth = stubAuth({
+      getAccessToken: () => currentSid,
+      getVehicleKey: () => 'vehicle-123',
+      updateToken: ((accessToken: string) => {
+        currentSid = accessToken;
+        updateToken(accessToken);
+      }) as any,
+      setVehicleKey,
+    });
+
+    const client = new KiaApiClient(auth, stubLog, 'u', 'p');
+    const request = vi.fn()
+      .mockResolvedValueOnce({
+        statusCode: 200,
+        body: {
+          status: {
+            statusCode: 1,
+            errorType: 1,
+            errorCode: 1005,
+            errorMessage: 'Invalid vehicle for current session',
+          },
+        },
+        headers: {},
+      })
+      .mockResolvedValueOnce({
+        statusCode: 200,
+        body: {
+          status: {
+            statusCode: 0,
+            errorType: 0,
+            errorCode: 0,
+            errorMessage: '',
+          },
+          payload: {
+            vehicleSummary: [
+              { vehicleKey: 'vehicle-123' },
+            ],
+          },
+        },
+        headers: {},
+      })
+      .mockResolvedValueOnce({
+        statusCode: 200,
+        body: {
+          status: {
+            statusCode: 0,
+            errorType: 0,
+            errorCode: 0,
+            errorMessage: '',
+          },
+        },
+        headers: { xid: 'action-123' },
+      });
+
+    vi.spyOn(client as any, 'request').mockImplementation(request);
+    vi.spyOn(client, 'login').mockImplementation(async () => {
+      currentSid = 'fresh-sid';
+      return { success: true };
+    });
+
+    await expect(client.lockDoors('vehicle-123')).resolves.toBe('action-123');
+
+    expect(request).toHaveBeenNthCalledWith(
+      2,
+      'GET',
+      'ownr/gvl',
+      undefined,
+      { sid: 'fresh-sid' },
+    );
+    expect(request).toHaveBeenNthCalledWith(
+      3,
+      'GET',
+      'rems/door/lock',
+      undefined,
+      { sid: 'fresh-sid', vinkey: 'vehicle-123' },
+    );
+    expect(setVehicleKey).toHaveBeenCalledWith('vehicle-123');
+  });
+
+  it('fails clearly when the selected vehicle is unavailable after re-login', async () => {
+    let currentSid = 'expired-sid';
+    const auth = stubAuth({
+      getAccessToken: () => currentSid,
+      getVehicleKey: () => 'vehicle-123',
+      setVehicleKey: vi.fn(),
+    });
+
+    const client = new KiaApiClient(auth, stubLog, 'u', 'p');
+    const request = vi.fn()
+      .mockResolvedValueOnce({
+        statusCode: 200,
+        body: {
+          status: {
+            statusCode: 1,
+            errorType: 1,
+            errorCode: 1005,
+            errorMessage: 'Invalid vehicle for current session',
+          },
+        },
+        headers: {},
+      })
+      .mockResolvedValueOnce({
+        statusCode: 200,
+        body: {
+          status: {
+            statusCode: 0,
+            errorType: 0,
+            errorCode: 0,
+            errorMessage: '',
+          },
+          payload: {
+            vehicleSummary: [
+              { vehicleKey: 'different-vehicle' },
+            ],
+          },
+        },
+        headers: {},
+      });
+
+    vi.spyOn(client as any, 'request').mockImplementation(request);
+    vi.spyOn(client, 'login').mockImplementation(async () => {
+      currentSid = 'fresh-sid';
+      return { success: true };
+    });
+
+    await expect(client.lockDoors('vehicle-123')).rejects.toBeInstanceOf(AuthenticationError);
   });
 });
