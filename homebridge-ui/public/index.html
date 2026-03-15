@@ -102,9 +102,14 @@
       setCredentialInputsDisabled(false);
     }
 
+    homebridge.addEventListener('configChanged', (event) => {
+      currentConfig = (event.data && event.data[0]) || {};
+    });
+
     (async function checkStatus() {
       try {
         await loadConfig();
+        homebridge.showSchemaForm();
         resetAuthActions();
         const res = await homebridge.request('/auth/status');
         if (res.ready) {

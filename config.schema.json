@@ -74,9 +74,6 @@
     }
   },
   "layout": [
-    { "key": "name" },
-    { "key": "username" },
-    { "key": "password" },
     { "key": "pollIntervalMinutes" },
     { "key": "vehicleIndex" },
     {
