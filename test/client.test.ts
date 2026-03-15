@@ -162,6 +162,75 @@ describe('parseNumber (via parseVehicleStatus)', () => {
 });
 
 describe('authenticatedRequest re-login flow', () => {
+  it('retries non-vehicle requests after re-login without restoring vehicle context', async () => {
+    const setVehicleKey = vi.fn();
+    let currentSid = 'expired-sid';
+
+    const auth = stubAuth({
+      getAccessToken: () => currentSid,
+      getVehicleKey: () => 'vehicle-123',
+      setVehicleKey,
+    });
+
+    const client = new KiaApiClient(auth, stubLog, 'u', 'p');
+    const request = vi.fn()
+      .mockResolvedValueOnce({
+        statusCode: 200,
+        body: {
+          status: {
+            statusCode: 1,
+            errorType: 1,
+            errorCode: 1005,
+            errorMessage: 'Invalid vehicle for current session',
+          },
+        },
+        headers: {},
+      })
+      .mockResolvedValueOnce({
+        statusCode: 200,
+        body: {
+          status: {
+            statusCode: 0,
+            errorType: 0,
+            errorCode: 0,
+            errorMessage: '',
+          },
+          payload: {
+            vehicleSummary: [
+              { vehicleKey: 'vehicle-123', vehicleIdentifier: 'vin-1' },
+            ],
+          },
+        },
+        headers: {},
+      });
+
+    vi.spyOn(client as any, 'request').mockImplementation(request);
+    vi.spyOn(client, 'login').mockImplementation(async () => {
+      currentSid = 'fresh-sid';
+      return { success: true };
+    });
+
+    await expect(client.getVehicles()).resolves.toEqual([
+      {
+        id: 'vin-1',
+        key: 'vehicle-123',
+        model: 'Unknown',
+        name: 'Kia Vehicle',
+        vin: '',
+      },
+    ]);
+
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request).toHaveBeenNthCalledWith(
+      2,
+      'GET',
+      'ownr/gvl',
+      undefined,
+      { sid: 'fresh-sid' },
+    );
+    expect(setVehicleKey).not.toHaveBeenCalled();
+  });
+
   it('reloads vehicle context before retrying a vehicle command', async () => {
     const updateToken = vi.fn();
     const setVehicleKey = vi.fn();

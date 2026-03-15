@@ -192,7 +192,9 @@ export class KiaApiClient {
         this.log.info('Session expired, attempting re-login...');
         const loginResult = await this.login();
         if (loginResult.success) {
-          await this.restoreVehicleContext(vehicleKey);
+          if (vehicleKey) {
+            await this.restoreVehicleContext(vehicleKey);
+          }
 
           // Retry with new token
           const newSid = this.auth.getAccessToken();
@@ -217,7 +219,7 @@ export class KiaApiClient {
   }
 
   private async restoreVehicleContext(vehicleKey?: string): Promise<void> {
-    const targetVehicleKey = vehicleKey ?? this.auth.getVehicleKey();
+    const targetVehicleKey = vehicleKey;
     if (!targetVehicleKey) {
       return;
     }
