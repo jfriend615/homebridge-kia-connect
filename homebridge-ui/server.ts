@@ -4,7 +4,7 @@ import { KiaAuthManager } from '../src/kia/auth.js';
 import { KiaApiClient } from '../src/kia/client.js';
 import { AuthenticationError } from '../src/kia/types.js';
 import type { OtpState } from '../src/kia/types.js';
-import { readSavedCredentials } from './config.js';
+import { hasSavedCredentials, readSavedCredentials } from './config.js';
 
 function createConsoleLogger(prefix: string): Logger {
   return {
@@ -49,23 +49,40 @@ class KiaConnectUiServer extends HomebridgePluginUiServer {
     return { authManager: this.authManager!, apiClient: this.apiClient! };
   }
 
-  private async handleAuthStatus(): Promise<{ authenticated: boolean; vehicleName?: string }> {
+  private getCredentialsConfigured(): boolean {
+    return hasSavedCredentials(readSavedCredentials(this.homebridgeConfigPath));
+  }
+
+  private async handleAuthStatus(): Promise<{ authenticated: boolean; credentialsConfigured: boolean; ready: boolean }> {
     const { authManager, apiClient } = this.getClients();
+    const credentialsConfigured = this.getCredentialsConfigured();
     authManager.reloadToken();
     const isValid = authManager.isTokenValid();
 
     if (!isValid) {
-      return { authenticated: false };
+      return {
+        authenticated: false,
+        credentialsConfigured,
+        ready: false,
+      };
     }
 
     try {
       await apiClient.getVehicles();
-      return { authenticated: true };
+      return {
+        authenticated: true,
+        credentialsConfigured,
+        ready: credentialsConfigured,
+      };
     } catch (e) {
       if (e instanceof AuthenticationError) {
         authManager.clearToken();
       }
-      return { authenticated: false };
+      return {
+        authenticated: false,
+        credentialsConfigured,
+        ready: false,
+      };
     }
   }
 

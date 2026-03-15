@@ -2,6 +2,13 @@ import { readFileSync } from 'node:fs';
 
 export type SavedCredentials = { username: string; password: string };
 
+export function hasSavedCredentials(savedCredentials?: SavedCredentials): boolean {
+  return typeof savedCredentials?.username === 'string'
+    && savedCredentials.username.trim() !== ''
+    && typeof savedCredentials.password === 'string'
+    && savedCredentials.password !== '';
+}
+
 export function readSavedCredentials(homebridgeConfigPath?: string): SavedCredentials | undefined {
   if (!homebridgeConfigPath) {
     return undefined;

@@ -81,21 +81,42 @@
       document.getElementById('password').disabled = disabled;
     }
 
+    function resetAuthActions() {
+      document.getElementById('login-btn').style.display = 'none';
+      document.getElementById('success-section').style.display = 'none';
+      document.getElementById('otp-section').style.display = 'none';
+      document.getElementById('status-message').className = '';
+    }
+
+    function renderAuthenticatedState() {
+      document.getElementById('success-section').style.display = 'block';
+      document.getElementById('status-message').textContent = 'Authenticated';
+      document.getElementById('status-message').className = 'text-success';
+      setCredentialInputsDisabled(false);
+    }
+
+    function renderUnauthenticatedState(message = 'Not authenticated') {
+      document.getElementById('status-message').textContent = message;
+      document.getElementById('status-message').className = '';
+      document.getElementById('login-btn').style.display = 'inline-block';
+      setCredentialInputsDisabled(false);
+    }
+
     (async function checkStatus() {
       try {
         await loadConfig();
+        resetAuthActions();
         const res = await homebridge.request('/auth/status');
-        if (res.authenticated) {
-          document.getElementById('status-message').textContent = 'Authenticated';
-          document.getElementById('status-message').className = 'text-success';
-          document.getElementById('success-section').style.display = 'block';
+        if (res.ready) {
+          renderAuthenticatedState();
+        } else if (res.authenticated && !res.credentialsConfigured) {
+          renderUnauthenticatedState('Authenticated session found, but saved credentials are missing. Log in again to save them.');
         } else {
-          document.getElementById('status-message').textContent = 'Not authenticated';
-          document.getElementById('login-btn').style.display = 'inline-block';
+          renderUnauthenticatedState();
         }
       } catch (e) {
-        document.getElementById('status-message').textContent = 'Not authenticated';
-        document.getElementById('login-btn').style.display = 'inline-block';
+        resetAuthActions();
+        renderUnauthenticatedState();
       }
     })();
 
@@ -119,16 +140,15 @@
         if (res.success) {
           pendingOtpCredentials = null;
           await persistCredentials(username, password);
-          document.getElementById('status-message').textContent = 'Authenticated!';
-          document.getElementById('status-message').className = 'text-success';
-          btn.style.display = 'none';
-          document.getElementById('success-section').style.display = 'block';
+          resetAuthActions();
+          renderAuthenticatedState();
           homebridge.toast.success('Login successful!');
         } else if (res.otpRequired) {
           pendingOtpCredentials = { username, password };
           setCredentialInputsDisabled(true);
           btn.style.display = 'none';
           document.getElementById('status-message').textContent = 'OTP verification required';
+          document.getElementById('status-message').className = '';
           document.getElementById('otp-section').style.display = 'block';
           let info = 'A one-time password is required.';
           if (res.email) info += ' Email: ' + res.email;
@@ -181,10 +201,8 @@
             await persistCredentials(pendingOtpCredentials.username, pendingOtpCredentials.password);
           }
           pendingOtpCredentials = null;
-          document.getElementById('otp-section').style.display = 'none';
-          document.getElementById('success-section').style.display = 'block';
-          document.getElementById('status-message').textContent = 'Authenticated!';
-          document.getElementById('status-message').className = 'text-success';
+          resetAuthActions();
+          renderAuthenticatedState();
           homebridge.toast.success('Authentication successful! Restart Homebridge to load your vehicle.');
         }
       } catch (e) {
