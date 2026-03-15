@@ -13,7 +13,9 @@ function stubAuth(overrides?: Partial<KiaAuthManager>): KiaAuthManager {
     clearToken: vi.fn(),
     isTokenValid: () => true,
     getVehicleKey: () => null,
-    setVehicleKey: vi.fn(),
+    getVehicleId: () => null,
+    getVehicleVin: () => null,
+    setVehicleIdentity: vi.fn(),
     ...overrides,
   } as any;
 }
@@ -163,13 +165,13 @@ describe('parseNumber (via parseVehicleStatus)', () => {
 
 describe('authenticatedRequest re-login flow', () => {
   it('retries non-vehicle requests after re-login without restoring vehicle context', async () => {
-    const setVehicleKey = vi.fn();
+    const setVehicleIdentity = vi.fn();
     let currentSid = 'expired-sid';
 
     const auth = stubAuth({
       getAccessToken: () => currentSid,
       getVehicleKey: () => 'vehicle-123',
-      setVehicleKey,
+      setVehicleIdentity,
     });
 
     const client = new KiaApiClient(auth, stubLog, 'u', 'p');
@@ -228,22 +230,24 @@ describe('authenticatedRequest re-login flow', () => {
       undefined,
       { sid: 'fresh-sid' },
     );
-    expect(setVehicleKey).not.toHaveBeenCalled();
+    expect(setVehicleIdentity).not.toHaveBeenCalled();
   });
 
   it('reloads vehicle context before retrying a vehicle command', async () => {
     const updateToken = vi.fn();
-    const setVehicleKey = vi.fn();
+    const setVehicleIdentity = vi.fn();
     let currentSid = 'expired-sid';
 
     const auth = stubAuth({
       getAccessToken: () => currentSid,
-      getVehicleKey: () => 'vehicle-123',
+      getVehicleKey: () => 'stale-key',
+      getVehicleVin: () => 'VIN123',
+      getVehicleId: () => 'vehicle-id-123',
       updateToken: ((accessToken: string) => {
         currentSid = accessToken;
         updateToken(accessToken);
       }) as any,
-      setVehicleKey,
+      setVehicleIdentity,
     });
 
     const client = new KiaApiClient(auth, stubLog, 'u', 'p');
@@ -271,7 +275,11 @@ describe('authenticatedRequest re-login flow', () => {
           },
           payload: {
             vehicleSummary: [
-              { vehicleKey: 'vehicle-123' },
+              {
+                vehicleKey: 'fresh-key',
+                vehicleIdentifier: 'vehicle-id-123',
+                vin: 'VIN123',
+              },
             ],
           },
         },
@@ -296,7 +304,7 @@ describe('authenticatedRequest re-login flow', () => {
       return { success: true };
     });
 
-    await expect(client.lockDoors('vehicle-123')).resolves.toBe('action-123');
+    await expect(client.lockDoors('stale-key')).resolves.toBe('action-123');
 
     expect(request).toHaveBeenNthCalledWith(
       2,
@@ -310,17 +318,19 @@ describe('authenticatedRequest re-login flow', () => {
       'GET',
       'rems/door/lock',
       undefined,
-      { sid: 'fresh-sid', vinkey: 'vehicle-123' },
+      { sid: 'fresh-sid', vinkey: 'fresh-key' },
     );
-    expect(setVehicleKey).toHaveBeenCalledWith('vehicle-123');
+    expect(setVehicleIdentity).toHaveBeenCalledWith('fresh-key', 'vehicle-id-123', 'VIN123');
   });
 
   it('fails clearly when the selected vehicle is unavailable after re-login', async () => {
     let currentSid = 'expired-sid';
     const auth = stubAuth({
       getAccessToken: () => currentSid,
-      getVehicleKey: () => 'vehicle-123',
-      setVehicleKey: vi.fn(),
+      getVehicleKey: () => 'stale-key',
+      getVehicleVin: () => 'VIN123',
+      getVehicleId: () => 'vehicle-id-123',
+      setVehicleIdentity: vi.fn(),
     });
 
     const client = new KiaApiClient(auth, stubLog, 'u', 'p');
@@ -348,7 +358,11 @@ describe('authenticatedRequest re-login flow', () => {
           },
           payload: {
             vehicleSummary: [
-              { vehicleKey: 'different-vehicle' },
+              {
+                vehicleKey: 'different-vehicle',
+                vehicleIdentifier: 'different-id',
+                vin: 'DIFFERENTVIN',
+              },
             ],
           },
         },
@@ -361,6 +375,6 @@ describe('authenticatedRequest re-login flow', () => {
       return { success: true };
     });
 
-    await expect(client.lockDoors('vehicle-123')).rejects.toBeInstanceOf(AuthenticationError);
+    await expect(client.lockDoors('stale-key')).rejects.toBeInstanceOf(AuthenticationError);
   });
 });

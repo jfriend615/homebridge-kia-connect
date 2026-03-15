@@ -81,6 +81,14 @@ export class KiaAuthManager {
     return this.token?.vehicleKey ?? null;
   }
 
+  getVehicleId(): string | null {
+    return this.token?.vehicleId ?? null;
+  }
+
+  getVehicleVin(): string | null {
+    return this.token?.vehicleVin ?? null;
+  }
+
   reloadToken(): void {
     this.token = this.loadToken();
   }
@@ -91,14 +99,18 @@ export class KiaAuthManager {
       refreshToken,
       deviceId: deviceId ?? this.getDeviceId(),
       vehicleKey: this.token?.vehicleKey,
+      vehicleId: this.token?.vehicleId,
+      vehicleVin: this.token?.vehicleVin,
       validUntil: Date.now() + SESSION_LIFETIME_MS,
     };
     this.saveToken(token);
   }
 
-  setVehicleKey(vehicleKey: string): void {
+  setVehicleIdentity(vehicleKey: string, vehicleId?: string, vehicleVin?: string): void {
     if (this.token) {
       this.token.vehicleKey = vehicleKey;
+      this.token.vehicleId = vehicleId;
+      this.token.vehicleVin = vehicleVin;
       this.saveToken(this.token);
     }
   }

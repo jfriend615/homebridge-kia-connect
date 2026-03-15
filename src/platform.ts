@@ -119,11 +119,12 @@ export class KiaConnectPlatform implements DynamicPlatformPlugin {
     const vehicle = vehicles[vehicleIndex]!;
     this.log.info(`Found vehicle: ${vehicle.name} (${vehicle.model}) VIN: ${vehicle.vin}`);
 
-    // Store vehicle key for future use
-    this.authManager.setVehicleKey(vehicle.key);
+    // Store the current session key plus stable vehicle identity for future re-logins
+    this.authManager.setVehicleIdentity(vehicle.key, vehicle.id, vehicle.vin);
 
     // Create or restore accessory
-    const uuid = this.api.hap.uuid.generate(vehicle.key);
+    const accessoryIdentity = vehicle.vin || vehicle.id || vehicle.key;
+    const uuid = this.api.hap.uuid.generate(accessoryIdentity);
     let accessory = this.accessories.get(uuid);
 
     if (accessory) {

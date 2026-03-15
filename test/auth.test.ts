@@ -75,10 +75,12 @@ describe('KiaAuthManager', () => {
   it('preserves vehicleKey across updateToken', () => {
     const mgr = new KiaAuthManager(tmpDir, stubLog);
     mgr.updateToken('sid', 'rm', 'DEV');
-    mgr.setVehicleKey('VK-789');
+    mgr.setVehicleIdentity('VK-789', 'VID-123', 'VIN-456');
 
     mgr.updateToken('sid-2', 'rm-2');
     expect(mgr.getVehicleKey()).toBe('VK-789');
+    expect(mgr.getVehicleId()).toBe('VID-123');
+    expect(mgr.getVehicleVin()).toBe('VIN-456');
   });
 
   it('clears token', () => {

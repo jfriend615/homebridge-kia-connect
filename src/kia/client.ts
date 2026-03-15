@@ -174,15 +174,16 @@ export class KiaApiClient {
       throw new AuthenticationError('No access token available', 0, 0);
     }
 
+    let activeVehicleKey = this.getActiveVehicleKey(vehicleKey);
     const headers: Record<string, string> = {
       ...extraHeaders,
       'sid': sid,
     };
-    if (vehicleKey) {
-      headers['vinkey'] = vehicleKey;
+    if (activeVehicleKey) {
+      headers['vinkey'] = activeVehicleKey;
     }
 
-    const response = await this.request(method, endpoint, body, headers);
+    const response = await this.request(method, endpoint, this.withVehicleKey(body, activeVehicleKey), headers);
     const status = response.body.status;
 
     // Check for auth errors
@@ -193,14 +194,22 @@ export class KiaApiClient {
         const loginResult = await this.login();
         if (loginResult.success) {
           if (vehicleKey) {
-            await this.restoreVehicleContext(vehicleKey);
+            activeVehicleKey = await this.restoreVehicleContext(vehicleKey);
           }
 
           // Retry with new token
           const newSid = this.auth.getAccessToken();
           if (newSid) {
             headers['sid'] = newSid;
-            const retryResponse = await this.request(method, endpoint, body, headers);
+            if (activeVehicleKey) {
+              headers['vinkey'] = activeVehicleKey;
+            }
+            const retryResponse = await this.request(
+              method,
+              endpoint,
+              this.withVehicleKey(body, activeVehicleKey),
+              headers,
+            );
             this.assertSuccess(retryResponse, endpoint);
             return retryResponse;
           }
@@ -218,12 +227,29 @@ export class KiaApiClient {
     return response;
   }
 
-  private async restoreVehicleContext(vehicleKey?: string): Promise<void> {
-    const targetVehicleKey = vehicleKey;
-    if (!targetVehicleKey) {
-      return;
+  private getActiveVehicleKey(vehicleKey?: string): string | undefined {
+    if (!vehicleKey) {
+      return undefined;
     }
 
+    return this.auth.getVehicleKey() ?? vehicleKey;
+  }
+
+  private withVehicleKey(
+    body: Record<string, unknown> | undefined,
+    vehicleKey?: string,
+  ): Record<string, unknown> | undefined {
+    if (!body || !vehicleKey || !Array.isArray(body.vinKey)) {
+      return body;
+    }
+
+    return {
+      ...body,
+      vinKey: [vehicleKey],
+    };
+  }
+
+  private async restoreVehicleContext(staleVehicleKey: string): Promise<string> {
     const sid = this.auth.getAccessToken();
     if (!sid) {
       throw new AuthenticationError('No access token available after re-login', 0, 0);
@@ -238,16 +264,37 @@ export class KiaApiClient {
       throw new AuthenticationError('No vehicles found after re-login', 1, 1005);
     }
 
-    const matchingVehicle = vehicleList.find((vehicle) => {
-      const vehicleRecord = vehicle as Record<string, unknown>;
-      return (vehicleRecord.vehicleKey as string | undefined) === targetVehicleKey;
-    });
+    const persistedVin = this.auth.getVehicleVin();
+    const persistedId = this.auth.getVehicleId();
 
-    if (!matchingVehicle) {
+    // Find the vehicle by key first, then fall back to stable identifiers (VIN, vehicleId)
+    // since vehicleKey can change across sessions
+    let match: Record<string, unknown> | undefined;
+    for (const v of vehicleList) {
+      const rec = v as Record<string, unknown>;
+      if (rec.vehicleKey === staleVehicleKey) {
+        match = rec;
+        break;
+      }
+      if (!match && persistedVin && rec.vin === persistedVin) {
+        match = rec;
+      }
+      if (!match && persistedId && rec.vehicleIdentifier === persistedId) {
+        match = rec;
+      }
+    }
+
+    if (!match) {
       throw new AuthenticationError('Selected vehicle is not available after re-login', 1, 1005);
     }
 
-    this.auth.setVehicleKey(targetVehicleKey);
+    const resolvedKey = (match.vehicleKey as string) ?? staleVehicleKey;
+    this.auth.setVehicleIdentity(
+      resolvedKey,
+      (match.vehicleIdentifier as string) ?? persistedId ?? undefined,
+      (match.vin as string) ?? persistedVin ?? undefined,
+    );
+    return resolvedKey;
   }
 
   private assertSuccess(response: HttpResponse, endpoint: string): void {

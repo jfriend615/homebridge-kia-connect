@@ -14,6 +14,8 @@ export interface PersistedToken {
   refreshToken: string;  // rmtoken
   deviceId: string;
   vehicleKey?: string;
+  vehicleId?: string;
+  vehicleVin?: string;
   validUntil: number;    // epoch ms
 }
 
