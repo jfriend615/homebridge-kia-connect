@@ -28,7 +28,7 @@ This plugin exposes a Kia vehicle to Apple Home through Homebridge, including ve
 Install through the Homebridge UI, or with npm:
 
 ```bash
-npm install -g homebridge-kia-connect
+npm install -g homebridge-kia
 ```
 
 Then restart Homebridge.

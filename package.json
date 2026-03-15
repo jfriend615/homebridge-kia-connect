@@ -3,14 +3,27 @@
   "version": "1.0.0",
   "description": "Homebridge plugin for Kia Connect vehicles",
   "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
   "files": [
-    "dist/**/*",
+    "dist",
     "config.schema.json"
   ],
   "type": "module",
   "keywords": [
-    "homebridge-plugin"
+    "homebridge-plugin",
+    "homebridge",
+    "kia",
+    "kia-connect",
+    "homekit"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jordanfreund/homebridge-kia-connect.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jordanfreund/homebridge-kia-connect/issues"
+  },
+  "homepage": "https://github.com/jordanfreund/homebridge-kia-connect#readme",
   "license": "ISC",
   "engines": {
     "node": "^20.18.0 || ^22.10.0 || ^24.0.0",
