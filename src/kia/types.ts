@@ -4,8 +4,12 @@ export interface KiaConnectConfig extends PlatformConfig {
   username: string;
   password: string;
   pollIntervalMinutes?: number;
-  enableClimateControl?: boolean;
-  enableDoorLock?: boolean;
+  showLock?: boolean;
+  showClimate?: boolean;
+  showStatus?: boolean;
+  showBody?: boolean;
+  showBattery?: boolean;
+  climateTemperature?: number;
   vehicleIndex?: number;
 }
 

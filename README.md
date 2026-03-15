@@ -41,8 +41,11 @@ The plugin is a dynamic platform and uses the following settings:
 - `password`: Kia Connect password
 - `vehicleIndex`: Which vehicle to use if your account has multiple vehicles
 - `pollIntervalMinutes`: Refresh interval, minimum `5`
-- `enableDoorLock`: Show the HomeKit lock service
-- `enableClimateControl`: Show the HomeKit climate switch
+- `showLock`: Show the HomeKit lock service
+- `showClimate`: Show the HomeKit climate switch
+- `showStatus`: Show fuel, low fuel, temperature, engine, and tire warning sensors
+- `showBody`: Show door, window, hood, and trunk sensors
+- `showBattery`: Show the 12V battery service
 
 Example:
 
@@ -54,8 +57,11 @@ Example:
   "password": "your-password",
   "vehicleIndex": 0,
   "pollIntervalMinutes": 30,
-  "enableDoorLock": true,
-  "enableClimateControl": true
+  "showLock": true,
+  "showClimate": true,
+  "showStatus": true,
+  "showBody": false,
+  "showBattery": true
 }
 ```
 
@@ -72,22 +78,28 @@ If Kia Connect requires a one-time password:
 
 ## HomeKit Services
 
-This plugin creates one accessory for the selected vehicle and can expose:
+The plugin creates up to five accessories per vehicle:
 
-- `LockMechanism` for door lock control
-- `Switch` for climate control
-- `Battery` for 12V battery level
-- `HumiditySensor` for fuel level
-- `TemperatureSensor` for outside temperature
-- `OccupancySensor` for engine running
-- `ContactSensor` services for doors, windows, hood, and trunk
-- `LeakSensor` for tire pressure warning
+- `${vehicleName} Lock`
+- `${vehicleName} Climate`
+- `${vehicleName} Status`
+- `${vehicleName} Body`
+- `${vehicleName} Battery`
+
+Service groups:
+
+- `Lock`: `LockMechanism`
+- `Climate`: `Switch`
+- `Status`: `HumiditySensor` for `Fuel`, `LeakSensor` for `Low Fuel Warning`, `TemperatureSensor`, `OccupancySensor`, and `LeakSensor` for `Tire Pressure Warning`
+- `Body`: `ContactSensor` services for doors, windows, hood, and trunk
+- `Battery`: `Battery` for `12V Battery`
 
 ## Notes
 
 - This plugin currently targets the US Kia Connect API.
-- Climate control uses a fixed start temperature of `72F`.
+- Climate control defaults to `72°F`. Set `climateTemperature` in your config to change it.
 - Polling is periodic and should not be set aggressively.
+- `showBody` defaults to `false`, so body sensors are hidden unless you enable them.
 
 ## Development
 

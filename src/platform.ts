@@ -10,8 +10,20 @@ import type {
 import { KiaAuthManager } from './kia/auth.js';
 import { KiaApiClient } from './kia/client.js';
 import { AuthenticationError } from './kia/types.js';
-import type { KiaConnectConfig, OtpState } from './kia/types.js';
-import { VehicleAccessory } from './vehicle-accessory.js';
+import type { KiaConnectConfig, OtpState, VehicleState } from './kia/types.js';
+import {
+  resolveAccessoryPresentation,
+  type AccessoryCategory,
+  type AccessoryPresentation,
+} from './accessory-layout.js';
+import {
+  BatteryAccessory,
+  BodyAccessory,
+  ClimateAccessory,
+  LockAccessory,
+  StatusAccessory,
+  type VehicleAccessoryInstance,
+} from './vehicle-accessory.js';
 import {
   PLATFORM_NAME,
   PLUGIN_NAME,
@@ -29,7 +41,7 @@ export class KiaConnectPlatform implements DynamicPlatformPlugin {
   private apiClient!: KiaApiClient;
   private pollTimer?: ReturnType<typeof setInterval>;
   private otpWatcher?: ReturnType<typeof setInterval>;
-  private vehicleAccessory?: VehicleAccessory;
+  private activeAccessories: VehicleAccessoryInstance[] = [];
 
   // Exposed for custom UI server
   public otpState?: OtpState;
@@ -119,46 +131,99 @@ export class KiaConnectPlatform implements DynamicPlatformPlugin {
     const vehicle = vehicles[vehicleIndex]!;
     this.log.info(`Found vehicle: ${vehicle.name} (${vehicle.model}) VIN: ${vehicle.vin}`);
 
-    // Store the current session key plus stable vehicle identity for future re-logins
     this.authManager.setVehicleIdentity(vehicle.key, vehicle.id, vehicle.vin);
 
-    // Create or restore accessory
     const accessoryIdentity = vehicle.vin || vehicle.id || vehicle.key;
-    const uuid = this.api.hap.uuid.generate(accessoryIdentity);
-    let accessory = this.accessories.get(uuid);
+    const presentation = resolveAccessoryPresentation(this.kiaConfig);
+    const requiredAccessories = this.buildAccessoryDefinitions(vehicle, accessoryIdentity, presentation);
+    const keepUuids = new Set(requiredAccessories.map((definition) => definition.uuid));
+    this.activeAccessories = requiredAccessories.map((definition) => {
+      const accessory = this.getOrCreateAccessory(definition.name, definition.uuid);
+      return definition.create(accessory);
+    });
 
-    if (accessory) {
-      this.log.info('Restoring existing accessory from cache:', vehicle.name);
-    } else {
-      this.log.info('Adding new accessory:', vehicle.name);
-      accessory = new this.api.platformAccessory(vehicle.name, uuid);
-      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
-      this.accessories.set(uuid, accessory);
-    }
+    this.removeCachedAccessories(keepUuids);
 
-    this.removeCachedAccessories(uuid);
-
-    // Create VehicleAccessory
-    this.vehicleAccessory = new VehicleAccessory(
-      this,
-      accessory,
-      this.apiClient,
-      vehicle.key,
-      vehicle,
-      this.kiaConfig,
-    );
-
-    // Fetch initial state
     try {
       const state = await this.apiClient.getVehicleStatus(vehicle.key);
-      this.vehicleAccessory.updateState(state);
+      this.updateActiveAccessories(state);
       this.log.info('Initial vehicle state loaded');
     } catch (e) {
       this.log.warn('Failed to fetch initial vehicle state:', e);
     }
 
-    // Start polling
     this.startPolling(vehicle.key);
+  }
+
+  private buildAccessoryDefinitions(
+    vehicle: { name: string; key: string; id: string; vin: string; model: string },
+    accessoryIdentity: string,
+    presentation: AccessoryPresentation,
+  ): Array<{
+    name: string;
+    uuid: string;
+    create: (accessory: PlatformAccessory) => VehicleAccessoryInstance;
+  }> {
+    return presentation.enabledCategories.map((category) => ({
+      name: `${vehicle.name} ${this.getCategorySuffix(category)}`,
+      uuid: this.api.hap.uuid.generate(`${accessoryIdentity}:${category}`),
+      create: (accessory: PlatformAccessory) => this.createGroupedAccessory(category, accessory, vehicle),
+    }));
+  }
+
+  private createGroupedAccessory(
+    category: AccessoryCategory,
+    accessory: PlatformAccessory,
+    vehicle: { name: string; key: string; id: string; vin: string; model: string },
+  ): VehicleAccessoryInstance {
+    switch (category) {
+    case 'lock':
+      return new LockAccessory(this, accessory, this.apiClient, vehicle.key, vehicle);
+    case 'climate':
+      return new ClimateAccessory(this, accessory, this.apiClient, vehicle.key, vehicle, this.kiaConfig.climateTemperature);
+    case 'status':
+      return new StatusAccessory(this, accessory, vehicle);
+    case 'body':
+      return new BodyAccessory(this, accessory, vehicle);
+    case 'battery':
+      return new BatteryAccessory(this, accessory, vehicle);
+    }
+  }
+
+  private getCategorySuffix(category: AccessoryCategory): string {
+    switch (category) {
+    case 'lock':
+      return 'Lock';
+    case 'climate':
+      return 'Climate';
+    case 'status':
+      return 'Status';
+    case 'body':
+      return 'Body';
+    case 'battery':
+      return 'Battery';
+    }
+  }
+
+  private getOrCreateAccessory(name: string, uuid: string): PlatformAccessory {
+    const existingAccessory = this.accessories.get(uuid);
+    if (existingAccessory) {
+      this.log.info('Restoring existing accessory from cache:', existingAccessory.displayName);
+      existingAccessory.displayName = name;
+      return existingAccessory;
+    }
+
+    this.log.info('Adding new accessory:', name);
+    const accessory = new this.api.platformAccessory(name, uuid);
+    this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+    this.accessories.set(uuid, accessory);
+    return accessory;
+  }
+
+  private updateActiveAccessories(state: VehicleState): void {
+    for (const accessory of this.activeAccessories) {
+      accessory.updateState(state);
+    }
   }
 
   private startPolling(vehicleKey: string): void {
@@ -183,9 +248,9 @@ export class KiaConnectPlatform implements DynamicPlatformPlugin {
     }, intervalMs);
   }
 
-  private removeCachedAccessories(keepUuid?: string): void {
+  private removeCachedAccessories(keepUuids?: Set<string>): void {
     for (const [cachedUuid, cachedAccessory] of this.accessories) {
-      if (cachedUuid === keepUuid) {
+      if (keepUuids?.has(cachedUuid)) {
         continue;
       }
       this.log.info('Removing stale accessory:', cachedAccessory.displayName);
@@ -231,7 +296,7 @@ export class KiaConnectPlatform implements DynamicPlatformPlugin {
   private async pollVehicleState(vehicleKey: string): Promise<void> {
     try {
       const state = await this.apiClient.getVehicleStatus(vehicleKey);
-      this.vehicleAccessory?.updateState(state);
+      this.updateActiveAccessories(state);
       this.log.debug('Vehicle state updated via poll');
     } catch (e) {
       if (e instanceof AuthenticationError) {

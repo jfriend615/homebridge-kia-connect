@@ -29,15 +29,40 @@
         "default": 30,
         "minimum": 5
       },
-      "enableClimateControl": {
-        "title": "Enable Climate Control",
+      "showLock": {
+        "title": "Show Door Lock",
         "type": "boolean",
         "default": true
       },
-      "enableDoorLock": {
-        "title": "Enable Door Lock",
+      "showClimate": {
+        "title": "Show Remote Start",
         "type": "boolean",
         "default": true
+      },
+      "showStatus": {
+        "title": "Show Vehicle Sensors",
+        "type": "boolean",
+        "default": true,
+        "description": "Fuel level, low fuel warning, outside temperature, engine running, and tire pressure."
+      },
+      "showBody": {
+        "title": "Show Body Sensors",
+        "type": "boolean",
+        "default": false,
+        "description": "Expose door, window, hood, and trunk sensors."
+      },
+      "showBattery": {
+        "title": "Show 12V Battery",
+        "type": "boolean",
+        "default": true
+      },
+      "climateTemperature": {
+        "title": "Remote Start Temperature (°F)",
+        "type": "integer",
+        "default": 72,
+        "minimum": 62,
+        "maximum": 82,
+        "description": "Target temperature when starting climate control remotely."
       },
       "vehicleIndex": {
         "title": "Vehicle Index",
@@ -47,5 +72,25 @@
         "description": "If you have multiple vehicles, specify the index (0 = first vehicle)"
       }
     }
-  }
+  },
+  "layout": [
+    { "key": "name" },
+    { "key": "username" },
+    { "key": "password" },
+    { "key": "pollIntervalMinutes" },
+    { "key": "vehicleIndex" },
+    {
+      "type": "fieldset",
+      "title": "Accessory Visibility",
+      "expandable": true,
+      "items": [
+        "showLock",
+        "showClimate",
+        "showStatus",
+        "showBody",
+        "showBattery"
+      ]
+    },
+    { "key": "climateTemperature" }
+  ]
 }
